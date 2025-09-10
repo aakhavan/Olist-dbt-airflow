@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.pyc
+
+# IDE / Editor specific
+.idea/
+.vscode/
+
+# Data files - These should be downloaded manually as per the README
+/data/
+
+# dbt artifacts
+/dbt_project/logs/
+/dbt_project/target/
+
+# Airflow logs - Managed by Docker volume
+/logs/
