@@ -1,0 +1,75 @@
+from typing import Dict, Any
+
+
+schemas: Dict[str, Dict[str, Any]] = {
+    'olist_customers_dataset': {
+        'customer_id': 'Nullable(String)',
+        'customer_unique_id': 'Nullable(String)',
+        'customer_zip_code_prefix': 'Nullable(String)',
+        'customer_city': 'Nullable(String)',
+        'customer_state': 'Nullable(String)',
+    },
+    'olist_geolocation_dataset': {
+        'geolocation_zip_code_prefix': 'Nullable(String)',
+        'geolocation_lat': 'Nullable(String)',
+        'geolocation_lng': 'Nullable(String)',
+        'geolocation_city': 'Nullable(String)',
+        'geolocation_state': 'Nullable(String)',
+    },
+    'olist_order_items_dataset': {
+        'order_id': 'Nullable(String)',
+        'order_item_id': 'Nullable(String)',
+        'product_id': 'Nullable(String)',
+        'seller_id': 'Nullable(String)',
+        'shipping_limit_date': 'Nullable(String)',
+        'price': 'Nullable(String)',
+        'freight_value': 'Nullable(String)',
+    },
+    'olist_order_payments_dataset': {
+        'order_id': 'Nullable(String)',
+        'payment_sequential': 'Nullable(String)',
+        'payment_type': 'Nullable(String)',
+        'payment_installments': 'Nullable(String)',
+        'payment_value': 'Nullable(String)',
+    },
+    'olist_order_reviews_dataset': {
+        'review_id': 'Nullable(String)',
+        'order_id': 'Nullable(String)',
+        'review_score': 'Nullable(String)',
+        'review_comment_title': 'Nullable(String)',
+        'review_comment_message': 'Nullable(String)',
+        'review_creation_date': 'Nullable(String)',
+        'review_answer_timestamp': 'Nullable(String)',
+    },
+    'olist_orders_dataset': {
+        'order_id': 'Nullable(String)',
+        'customer_id': 'Nullable(String)',
+        'order_status': 'Nullable(String)',
+        'order_purchase_timestamp': 'Nullable(String)',
+        'order_approved_at': 'Nullable(String)',
+        'order_delivered_carrier_date': 'Nullable(String)',
+        'order_delivered_customer_date': 'Nullable(String)',
+        'order_estimated_delivery_date': 'Nullable(String)',
+    },
+    'olist_products_dataset': {
+        'product_id': 'Nullable(String)',
+        'product_category_name': 'Nullable(String)',
+        'product_name_lenght': 'Nullable(String)',
+        'product_description_lenght': 'Nullable(String)',
+        'product_photos_qty': 'Nullable(String)',
+        'product_weight_g': 'Nullable(String)',
+        'product_length_cm': 'Nullable(String)',
+        'product_height_cm': 'Nullable(String)',
+        'product_width_cm': 'Nullable(String)',
+    },
+    'olist_sellers_dataset': {
+        'seller_id': 'Nullable(String)',
+        'seller_zip_code_prefix': 'Nullable(String)',
+        'seller_city': 'Nullable(String)',
+        'seller_state': 'Nullable(String)',
+    },
+    'product_category_name_translation': {
+        'product_category_name': 'Nullable(String)',
+        'product_category_name_english': 'Nullable(String)',
+    },
+}

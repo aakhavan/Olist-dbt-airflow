@@ -1,0 +1,12 @@
+olist_dbt:
+  target: dev
+  outputs:
+    dev:
+      type: clickhouse
+      host: clickhouse-server # Docker service name
+      port: 8123
+      user: admin
+      password: admin
+      schema: intermediate
+      threads: 4
+      secure: false

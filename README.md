@@ -1,31 +1,24 @@
-# Local ELT Project with Airflow, dbt, and PostgreSQL
+# Local ELT Project with Airflow, dbt, ClickHouse, and Superset
 
-This project is a self-contained, local ELT (Extract, Load, Transform) pipeline designed to showcase senior-level data engineering skills using modern tools. It uses the Olist Brazilian E-commerce dataset from Kaggle.
+This project is a self-contained, local ELT (Extract, Load, Transform) pipeline designed to showcase a modern, professional data engineering architecture for a job interview. It uses the Olist Brazilian E-commerce dataset from Kaggle.
 
 ## Architecture
 
-The project uses Docker Compose to orchestrate three main components:
+The project uses Docker Compose to orchestrate a decoupled, containerized environment:
 
-1.  **PostgreSQL**: Acts as the data warehouse. It stores the raw data, and dbt creates transformed models within it.
-2.  **Apache Airflow**: The orchestrator that schedules and runs the ELT pipeline. It runs a Python script to load data and then triggers dbt commands.
-3.  **dbt (Data Build Tool)**: Used for the "T" (Transform) in ELT. It transforms the raw data loaded by Airflow into clean, analytics-ready tables.
+1.  **PostgreSQL (`postgres_airflow`)**: Serves exclusively as the metadata backend for Airflow. It is completely separate from the data pipeline.
+2.  **ClickHouse (`clickhouse-server`)**: The primary data warehouse (DWH). It's a high-performance, column-oriented database ideal for analytics.
+3.  **Apache Airflow (`airflow`)**: The orchestrator. It runs a simple `standalone` instance and uses the `DockerOperator` to delegate tasks to other containers, keeping the Airflow environment clean and focused.
+4.  **dbt (`dbt-clickhouse-olist` image)**: The transformation tool. dbt runs inside its own ephemeral Docker container, triggered by Airflow. This decouples the transformation logic from the orchestrator.
+5.  **Apache Superset (`superset`)**: The business intelligence tool used to visualize the final, transformed data from ClickHouse.
 
-The pipeline flow is as follows:
+### Pipeline Flow
+
 1.  An Airflow DAG is triggered (manually in this case).
-2.  A Python task in Airflow reads CSV files from the local `data/` directory and loads them into a `raw` schema in PostgreSQL.
-3.  A `dbt run` task is triggered, transforming the raw data into staging and mart models. This includes an **incremental model** for `fct_orders` that only processes new data on subsequent runs.
-4.  A `dbt test` task runs to ensure the integrity and quality of the transformed data, including a **custom generic test**.
-
-## Key Features & Skills Demonstrated
-
-*   **Containerization**: Entire environment is defined in `docker-compose.yml` for easy setup and reproducibility.
-*   **Orchestration**: Airflow DAG orchestrates the entire pipeline with clear dependencies.
-*   **Idempotent Data Loading**: The loading script is designed to be re-runnable without side effects.
-*   **Advanced dbt**:
-    *   **Incremental Models**: `fct_orders` is built incrementally to efficiently process new data, a crucial skill for large datasets.
-    *   **Custom Generic Tests**: `assert_is_positive` shows how to extend dbt's testing framework for custom data quality checks.
-    *   **Macros**: A `cents_to_dollars` macro demonstrates how to create reusable SQL logic.
-    *   **Explicit Profiles**: A `profiles.yml` is included to manage database connections robustly.
+2.  A Python task loads the raw Olist CSV files into a `raw` schema in ClickHouse.
+3.  A `DockerOperator` task builds the dbt image.
+4.  A `DockerOperator` task starts a new container from the dbt image and executes `dbt run` to transform the raw data into analytics-ready tables (`staging` and `marts` layers).
+5.  A final `DockerOperator` task runs `dbt test` to ensure data quality.
 
 ## Prerequisites
 
@@ -44,62 +37,50 @@ The pipeline flow is as follows:
     *   `olist_order_items_dataset.csv`
     *   `olist_order_payments_dataset.csv`
 
-**Step 2: A Note for Windows Users (Line Endings)**
+**Step 2: Build and Run the Docker Containers**
 
-When you create `docker/postgres-init.sh` on Windows, your editor might use Windows-style line endings (CRLF). The Linux container requires Unix-style endings (LF).
-
-**To fix this**, open `docker/postgres-init.sh` in your code editor (like VS Code or PyCharm), and look in the bottom-right status bar. If it says `CRLF`, click on it and change it to `LF`. Save the file.
-
-**Step 3: Build and Run the Docker Containers**
-
-Open your terminal in the project's root directory (`C:\Users\amir0\PycharmProjects\OList_dbt_airflow`) and run:
+Open your terminal in the project's root directory and run:
 
 ```bash
-# Build the custom Airflow image and start all services in detached mode
+# Build and start all services in detached mode
 docker-compose up --build -d
 ```
 
 This command will:
-1.  Build the custom Airflow image with dbt installed.
-2.  Start the PostgreSQL and Airflow services.
-3.  Initialize the Airflow metadata database and create a default `admin` user.
+1.  Start PostgreSQL, ClickHouse, Airflow, and Superset services.
+2.  Initialize the Airflow and Superset metadata databases.
+3.  Automatically configure Superset to connect to the ClickHouse DWH.
 
 It may take a few minutes for all services to become healthy.
 
-**Step 4: Trigger the Airflow DAG**
+**Step 3: Trigger the Airflow DAG**
 
 1.  Open your web browser and navigate to the Airflow UI: `http://localhost:8080`.
-2.  Log in with the username `admin` and password `admin`.
-3.  On the main DAGs page, you will see `olist_elt_pipeline`. Un-pause it by clicking the toggle on the left.
-4.  Click on the DAG name and then click the "Play" button (▶️) on the top right to trigger a new DAG run.
+2.  Log in with the username `airflow_admin` and password `airflow_admin`.
+3.  On the main DAGs page, find `olist_elt_pipeline`. Un-pause it by clicking the toggle on the left.
+4.  Click the "Play" button (▶️) on the right to trigger a new DAG run.
 
 You can monitor the progress of the run in the "Grid" view.
 
-**Step 5: Verify the Results in PostgreSQL**
+**Step 4: Visualize in Superset**
 
-Once the DAG run completes successfully, the transformed tables will be available in the `olist` database. You can connect to Postgres using any SQL client (like DBeaver, DataGrip, or `psql`) with these credentials:
+Once the DAG run completes successfully, the transformed tables will be available in ClickHouse and ready to be visualized in Superset.
 
-*   **Host**: `localhost`
-*   **Port**: `5432`
-*   **Database**: `olist`
-*   **User**: `postgres`
-*   **Password**: `postgres`
+1.  Navigate to the Superset UI: `http://localhost:8888`.
+2.  Log in with the username `admin` and password `admin`.
+3.  The `Olist DWH` data source should already be connected.
+4.  Click the **+** button in the top right and select **Chart**.
+5.  Choose the `mart_customer_revenue` table from the `Olist DWH` datasource.
+6.  Create a simple chart:
+    *   **Chart Type**: Table
+    *   **Columns**: `customer_unique_id`, `number_of_orders`, `total_revenue`
+    *   Click **Create Chart**.
 
-Query the final fact table to see the result:
-
-```sql
-SELECT * FROM marts.fct_orders LIMIT 10;
-```
-
-You can also check the raw tables:
-
-```sql
-SELECT * FROM raw.olist_orders_dataset LIMIT 10;
-```
+You can now explore the transformed data and build dashboards.
 
 ## Cleaning Up
 
-To stop and remove all containers, networks, and volumes, run:
+To stop and remove all containers, networks, and volumes (including all database data), run:
 
 ```bash
 docker-compose down --volumes

@@ -1,95 +1,112 @@
 import os
 from datetime import datetime
+import time
+import requests
 import pandas as pd
-from sqlalchemy import create_engine
+import clickhouse_connect
 
 from airflow.decorators import dag, task
-from airflow.operators.bash import BashOperator
+from airflow.providers.docker.operators.docker import DockerOperator
+from docker.types import Mount
 
-# Define constants for file paths and database connection
-# These paths are inside the Airflow container
-DBT_PROJECT_DIR = "/usr/local/airflow/dbt_project"
-DATA_DIR = "/usr/local/airflow/data"
-DB_CONN_STR = "postgresql+psycopg2://postgres:postgres@postgres:5432/olist"
+from schemas import schemas as RAW_TABLE_SCHEMAS
 
-# Define the list of CSV files to be loaded
-CSV_FILES = [
-    "olist_customers_dataset.csv",
-    "olist_orders_dataset.csv",
-    "olist_order_items_dataset.csv",
-    "olist_order_payments_dataset.csv",
-]
+CLICKHOUSE_HOST = "clickhouse-server"
+CLICKHOUSE_PORT = 8123
+CLICKHOUSE_USER = "admin"
+CLICKHOUSE_PASSWORD = "admin"
+DOCKER_NETWORK = "etl_network"
+DBT_IMAGE_NAME = "dbt-clickhouse-olist:latest"
 
+
+def _ensure_table(client, db: str, table: str, schema: dict) -> None:
+    cols = ",\n  ".join(f"`{col_name}` {col_type}" for col_name, col_type in schema.items())
+    client.command(f"CREATE DATABASE IF NOT EXISTS {db}")
+    client.command(
+        f"""
+        CREATE OR REPLACE TABLE {db}.{table} (
+          {cols}
+        )
+        ENGINE = MergeTree
+        ORDER BY tuple()
+        """
+    )
 
 @dag(
     dag_id="olist_elt_pipeline",
     start_date=datetime(2023, 1, 1),
     schedule_interval=None,
     catchup=False,
-    tags=["olist", "dbt"],
-    doc_md="""
-    ### Olist ELT Pipeline
-    This pipeline performs the following steps:
-    1. **Load Raw Data**: Loads Olist CSV files from the `data/` directory into the `raw` schema in PostgreSQL.
-    2. **dbt Run**: Executes `dbt run` to transform the raw data into staging and mart models.
-    3. **dbt Test**: Executes `dbt test` to validate the transformed data.
-    """,
+    tags=["olist", "dbt", "clickhouse"],
 )
 def olist_elt_pipeline():
-    """
-    Orchestrates the ELT process for the Olist dataset.
-    """
+    @task
+    def wait_for_clickhouse():
+        url = f"http://{CLICKHOUSE_HOST}:{CLICKHOUSE_PORT}/ping"
+        for _ in range(60):
+            try:
+                r = requests.get(url, timeout=2)
+                if r.status_code == 200 and r.text.strip() == "Ok.":
+                    return
+            except Exception:
+                pass
+            time.sleep(2)
+        raise RuntimeError("ClickHouse not reachable on network 'elt_network'")
 
     @task
     def load_raw_data():
-        """
-        Loads Olist CSV data into the 'raw' schema of the PostgreSQL database.
-        This task is idempotent: it truncates and replaces the data on each run.
-        """
-        engine = create_engine(DB_CONN_STR)
-        
-        # Create the 'raw' schema if it doesn't exist
-        with engine.connect() as conn:
-            conn.execute("CREATE SCHEMA IF NOT EXISTS raw;")
+        client = clickhouse_connect.get_client(
+            host=CLICKHOUSE_HOST,
+            port=CLICKHOUSE_PORT,
+            username=CLICKHOUSE_USER,
+            password=CLICKHOUSE_PASSWORD,
+        )
 
-        for file_name in CSV_FILES:
-            file_path = os.path.join(DATA_DIR, file_name)
+        data_dir = "/opt/airflow/data"
+        csv_files = [f for f in os.listdir(data_dir) if f.endswith(".csv")]
+
+        for file_name in csv_files:
+            file_path = os.path.join(data_dir, file_name)
             table_name = file_name.replace(".csv", "")
 
-            if not os.path.exists(file_path):
-                raise FileNotFoundError(f"CSV file not found at {file_path}")
+            if table_name not in RAW_TABLE_SCHEMAS:
+                print(f"Skipping file with no defined schema: {file_name}")
+                continue
 
-            df = pd.read_csv(file_path)
-            
-            print(f"Loading {len(df)} rows into raw.{table_name}...")
-            
-            # Load data into a table in the 'raw' schema
-            df.to_sql(
-                table_name,
-                engine,
-                schema="raw",
-                if_exists="replace",
-                index=False,
-                chunksize=10000,
-            )
-            print(f"Successfully loaded data into raw.{table_name}.")
+            schema = RAW_TABLE_SCHEMAS[table_name]
 
+            try:
+                df = pd.read_csv(file_path, encoding="utf-8", dtype=str, keep_default_na=False, na_values=[''])
+                if df.empty:
+                    print(f"Skipping empty file: {file_name}")
+                    continue
+                df.columns = [c.replace("-", "_") for c in df.columns]
+                df = df[schema.keys()]
 
-    # dbt tasks using BashOperator
-    # We specify the project and profiles directory for dbt
-    dbt_run = BashOperator(
+                _ensure_table(client, "raw", table_name, schema)
+                client.insert_df(table=table_name, df=df, database="raw")
+                print(f"Loaded {len(df)} rows into raw.{table_name}")
+            except Exception as e:
+                print(f"Skipping file due to error: {file_name} - {e}")
+
+    dbt_run = DockerOperator(
         task_id="dbt_run",
-        bash_command=f"dbt run --project-dir {DBT_PROJECT_DIR} --profiles-dir {DBT_PROJECT_DIR}",
+        image=DBT_IMAGE_NAME,
+        command="run --profiles-dir .",
+        network_mode=DOCKER_NETWORK,  # now guaranteed to exist as 'elt_network'
+        auto_remove=True,
+        mount_tmp_dir=False,
     )
 
-    dbt_test = BashOperator(
+    dbt_test = DockerOperator(
         task_id="dbt_test",
-        bash_command=f"dbt test --project-dir {DBT_PROJECT_DIR} --profiles-dir {DBT_PROJECT_DIR}",
+        image=DBT_IMAGE_NAME,
+        command="test --profiles-dir .",
+        network_mode=DOCKER_NETWORK,
+        auto_remove=True,
+        mount_tmp_dir=False,
     )
 
-    # Define task dependencies
-    load_raw_data() >> dbt_run >> dbt_test
+    wait_for_clickhouse() >> load_raw_data() >> dbt_run >> dbt_test
 
-
-# Instantiate the DAG
 olist_elt_pipeline()

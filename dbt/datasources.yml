@@ -1,0 +1,7 @@
+version: 1.0.0
+datasources:
+  - datasource_name: Olist DWH
+    description: Olist E-Commerce Data Warehouse on ClickHouse
+    type: clickhouse
+    database_name: default
+    uri: clickhousedb://admin:admin@clickhouse-server:9000/default

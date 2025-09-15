@@ -15,3 +15,5 @@ __pycache__/
 
 # Airflow logs - Managed by Docker volume
 /logs/
+
+/clickhouse_data/
