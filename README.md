@@ -1,87 +1,65 @@
-# Local ELT Project with Airflow, dbt, ClickHouse, and Superset
+# Olist E-commerce ELT Pipeline
 
-This project is a self-contained, local ELT (Extract, Load, Transform) pipeline designed to showcase a modern, professional data engineering architecture for a job interview. It uses the Olist Brazilian E-commerce dataset from Kaggle.
+This project demonstrates a complete, containerized ELT pipeline for the Olist e-commerce dataset. The primary goal is to showcase a modern data stack using **dbt** for transformation, **Airflow** for orchestration, and **ClickHouse** as an analytical data warehouse.
 
 ## Architecture
 
-The project uses Docker Compose to orchestrate a decoupled, containerized environment:
+The pipeline follows a simple, robust architecture, with each component running in its own Docker container.
 
-1.  **PostgreSQL (`postgres_airflow`)**: Serves exclusively as the metadata backend for Airflow. It is completely separate from the data pipeline.
-2.  **ClickHouse (`clickhouse-server`)**: The primary data warehouse (DWH). It's a high-performance, column-oriented database ideal for analytics.
-3.  **Apache Airflow (`airflow`)**: The orchestrator. It runs a simple `standalone` instance and uses the `DockerOperator` to delegate tasks to other containers, keeping the Airflow environment clean and focused.
-4.  **dbt (`dbt-clickhouse-olist` image)**: The transformation tool. dbt runs inside its own ephemeral Docker container, triggered by Airflow. This decouples the transformation logic from the orchestrator.
-5.  **Apache Superset (`superset`)**: The business intelligence tool used to visualize the final, transformed data from ClickHouse.
+```
+┌──────────┐     ┌──────────────────┐     ┌─────────────┐     ┌────────────────┐
+│          │     │                  │     │             │     │                │
+│   CSVs   ├────►│  Airflow (dbt)   ├────►│  ClickHouse │◄───┤ BI (Python)  │
+│          │     │ (Orchestration)  │     │  (Warehouse)│     │ (Visualization)│
+└──────────┘     └──────────────────┘     └─────────────┘     └────────────────┘
+```
 
-### Pipeline Flow
+* **Data Source**: Raw CSV files from the Olist E-commerce dataset.
+* **Orchestration**: Apache Airflow triggers and monitors the dbt transformation jobs.
+* **Transformation**: dbt models clean, transform, and structure the raw data into analytical tables.
+* **Data Warehouse**: ClickHouse stores the transformed data, ready for querying.
+* **BI & Visualization**: A Python script (`dashboard.py`) connects to ClickHouse to run analytical queries and generate insights.
 
-1.  An Airflow DAG is triggered (manually in this case).
-2.  A Python task loads the raw Olist CSV files into a `raw` schema in ClickHouse.
-3.  A `DockerOperator` task builds the dbt image.
-4.  A `DockerOperator` task starts a new container from the dbt image and executes `dbt run` to transform the raw data into analytics-ready tables (`staging` and `marts` layers).
-5.  A final `DockerOperator` task runs `dbt test` to ensure data quality.
+***
 
-## Prerequisites
+## Getting Started
 
-*   Docker and Docker Compose installed.
-*   The Olist dataset CSV files from Kaggle.
+### Prerequisites
 
-## Setup and Execution
+* Docker and Docker Compose installed on your local machine.
 
-**Step 1: Prepare the Data**
+### 1. Download the Dataset
 
-1.  Create a `data/` directory in the root of this project.
-2.  Download the Olist dataset from Kaggle.
-3.  Place the following CSV files into the `data/` directory:
-    *   `olist_customers_dataset.csv`
-    *   `olist_orders_dataset.csv`
-    *   `olist_order_items_dataset.csv`
-    *   `olist_order_payments_dataset.csv`
+This project uses the **Brazilian E-Commerce Public Dataset by Olist**.
 
-**Step 2: Build and Run the Docker Containers**
+* **Download Link**: [https://www.kaggle.com/datasets/olistbr/brazilian-ecommerce](https://www.kaggle.com/datasets/olistbr/brazilian-ecommerce)
+* **Instructions**: Download the `.zip` file, extract it, and place all the `.csv` files inside the `data/` directory at the root of this project.
 
-Open your terminal in the project's root directory and run:
+### 2. Run the Pipeline
+
+Once the data is in place, you can start the entire pipeline with a single command:
 
 ```bash
-# Build and start all services in detached mode
-docker-compose up --build -d
+docker-compose up --build
 ```
 
 This command will:
-1.  Start PostgreSQL, ClickHouse, Airflow, and Superset services.
-2.  Initialize the Airflow and Superset metadata databases.
-3.  Automatically configure Superset to connect to the ClickHouse DWH.
+1.  Build the custom Docker images for Airflow, dbt, and our BI script.
+2.  Start all services (Airflow, dbt, ClickHouse, Superset).
+3.  Automatically trigger the Airflow DAG to run the dbt models and populate ClickHouse.
 
-It may take a few minutes for all services to become healthy.
+You can access the Airflow UI at `http://localhost:8080` (username/password: `airflow`).
 
-**Step 3: Trigger the Airflow DAG**
+***
 
-1.  Open your web browser and navigate to the Airflow UI: `http://localhost:8080`.
-2.  Log in with the username `airflow_admin` and password `airflow_admin`.
-3.  On the main DAGs page, find `olist_elt_pipeline`. Un-pause it by clicking the toggle on the left.
-4.  Click the "Play" button (▶️) on the right to trigger a new DAG run.
+## Project Structure
 
-You can monitor the progress of the run in the "Grid" view.
-
-**Step 4: Visualize in Superset**
-
-Once the DAG run completes successfully, the transformed tables will be available in ClickHouse and ready to be visualized in Superset.
-
-1.  Navigate to the Superset UI: `http://localhost:8888`.
-2.  Log in with the username `admin` and password `admin`.
-3.  The `Olist DWH` data source should already be connected.
-4.  Click the **+** button in the top right and select **Chart**.
-5.  Choose the `mart_customer_revenue` table from the `Olist DWH` datasource.
-6.  Create a simple chart:
-    *   **Chart Type**: Table
-    *   **Columns**: `customer_unique_id`, `number_of_orders`, `total_revenue`
-    *   Click **Create Chart**.
-
-You can now explore the transformed data and build dashboards.
-
-## Cleaning Up
-
-To stop and remove all containers, networks, and volumes (including all database data), run:
-
-```bash
-docker-compose down --volumes
+```
+.
+├── airflow/                # Airflow configurations, DAGs, and Dockerfile
+├── dashboard/              # Python script for BI dashboard
+├── data/                   # (Git-ignored) Raw Olist CSV files go here
+├── dbt/                    # dbt project, models, and configurations
+├── docker-compose.yml      # Defines all services and their interactions
+└── README.md
 ```
