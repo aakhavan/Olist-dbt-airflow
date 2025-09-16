@@ -2,12 +2,12 @@ import os
 import pandas as pd
 from sqlalchemy import create_engine, text
 
-# Get the database connection string from an environment variable
+
 DB_CONN_STR = os.environ.get("DB_CONN_STR")
 if not DB_CONN_STR:
     raise ValueError("DB_CONN_STR environment variable not set.")
 
-# These paths are relative to the container's file system
+
 DATA_DIR = "/data"
 CSV_FILES = [
     "olist_customers_dataset.csv",

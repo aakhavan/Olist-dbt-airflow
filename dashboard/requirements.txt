@@ -2,3 +2,4 @@ streamlit==1.33.0
 pandas==2.2.1
 clickhouse-connect==0.7.2
 matplotlib
+python-dotenv

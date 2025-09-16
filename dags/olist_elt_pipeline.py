@@ -11,10 +11,11 @@ from docker.types import Mount
 
 from schemas import schemas as RAW_TABLE_SCHEMAS
 
-CLICKHOUSE_HOST = "clickhouse-server"
-CLICKHOUSE_PORT = 8123
-CLICKHOUSE_USER = "admin"
-CLICKHOUSE_PASSWORD = "admin"
+# Securely load credentials from environment variables
+CLICKHOUSE_HOST = os.getenv("CLICKHOUSE_HOST", "clickhouse-server")
+CLICKHOUSE_PORT = int(os.getenv("CLICKHOUSE_PORT", 8123))
+CLICKHOUSE_USER = os.getenv("CLICKHOUSE_USER", "admin")
+CLICKHOUSE_PASSWORD = os.getenv("CLICKHOUSE_PASSWORD", "admin")
 DOCKER_NETWORK = "etl_network"
 DBT_IMAGE_NAME = "dbt-clickhouse-olist:latest"
 

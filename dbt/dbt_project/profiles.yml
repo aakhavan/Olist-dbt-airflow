@@ -5,8 +5,8 @@ olist_dbt:
       type: clickhouse
       host: clickhouse-server # Docker service name
       port: 8123
-      user: admin
-      password: admin
+      user: "{{ env_var('CLICKHOUSE_USER', 'admin') }}"
+      password: "{{ env_var('CLICKHOUSE_PASSWORD', 'admin') }}"
       schema: intermediate
       threads: 4
       secure: false

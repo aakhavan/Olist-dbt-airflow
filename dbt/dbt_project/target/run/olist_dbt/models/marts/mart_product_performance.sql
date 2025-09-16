@@ -4,14 +4,16 @@
     
     
         
-        insert into `reporting`.`mart_product_performance__dbt_backup`
-        ("product_id", "product_category", "total_units_sold", "total_revenue", "average_review_score")with order_items as (
+        insert into `reporting`.`mart_product_performance`
+        ("product_id", "order_date", "product_category", "total_units_sold", "total_revenue", "average_review_score")with order_items as (
     select
-        order_id,
-        product_id,
-        price,
-        freight_value
-    from `intermediate`.`stg_order_items`
+        oi.order_id,
+        oi.product_id,
+        oi.price,
+        oi.freight_value,
+        o.order_purchase_timestamp
+    from `intermediate`.`stg_order_items` oi
+    join `intermediate`.`stg_orders` o on oi.order_id = o.order_id
 ),
 
 order_reviews as (
@@ -26,19 +28,17 @@ translations as (
     select * from `intermediate`.`stg_product_category_name_translation`
 ),
 
-
-product_metrics as (
+product_metrics_by_day as (
     select
         product_id,
+        toDate(order_purchase_timestamp) as order_date,
         count(distinct order_id) as total_orders,
         sum(price) as total_revenue,
-        sum(freight_value) as total_freight_cost,
         count(order_id) as total_units_sold
     from order_items
-    group by 1
+    group by 1, 2
 ),
 
--- Aggregate review scores, joining through order_items to link reviews to products
 product_reviews as (
     select
         product_id,
@@ -49,15 +49,16 @@ product_reviews as (
 )
 
 select
-    p.product_id as product_id,
+    pm.product_id as product_id,
+    pm.order_date as order_date,
     t.product_category_name_english as product_category,
     coalesce(pm.total_units_sold, 0) as total_units_sold,
     coalesce(pm.total_revenue, 0) as total_revenue,
     coalesce(pr.average_review_score, 0) as average_review_score
-from `intermediate`.`stg_products` p
-left join product_metrics pm on p.product_id = pm.product_id
-left join product_reviews pr on p.product_id = pr.product_id
+from product_metrics_by_day pm
+left join `intermediate`.`stg_products` p on p.product_id = pm.product_id
+left join product_reviews pr on pm.product_id = pr.product_id
 left join translations t on p.product_category_name = t.product_category_name
-where pm.total_orders is not null -- Only include products that have been sold
-order by total_revenue desc
+where pm.total_orders is not null
+order by 2,3
   

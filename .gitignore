@@ -10,10 +10,15 @@ __pycache__/
 /data/
 
 # dbt artifacts
+/dbt/logs/
 /dbt_project/logs/
 /dbt_project/target/
+/dbt_project/.user.yml
 
 # Airflow logs - Managed by Docker volume
 /logs/
 
 /clickhouse_data/
+
+# Environment variables
+.env

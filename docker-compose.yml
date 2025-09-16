@@ -52,7 +52,6 @@ services:
       CLICKHOUSE_PASSWORD: admin
     volumes:
       - clickhouse-data:/var/lib/clickhouse
-      - ./docker/clickhouse-init.sql:/docker-entrypoint-initdb.d/clickhouse-init.sql:ro
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:8123/ping"]
       interval: 10s
@@ -122,6 +121,8 @@ services:
     depends_on:
       airflow-init:
         condition: service_completed_successfully
+    env_file:
+      - .env
 
   # -------------------------------------
   # Airflow Scheduler Service
@@ -133,6 +134,8 @@ services:
     depends_on:
       airflow-init:
         condition: service_completed_successfully
+    env_file:
+      - .env
   
   # -------------------------------------
   # Streamlit Dashboard (BI Tool)
@@ -148,6 +151,8 @@ services:
         condition: service_healthy
     networks:
       - elt_network
+    volumes:
+      - .env:/app/.env
 
 volumes:
   postgres-airflow-data:
